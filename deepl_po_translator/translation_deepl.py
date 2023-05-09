@@ -3,7 +3,7 @@ import re
 import os
 from dotmap import DotMap
 
-from authkey import auth_key
+from .authkey import auth_key
 
 translator = deepl.Translator(auth_key)
 default_language = 'CS'

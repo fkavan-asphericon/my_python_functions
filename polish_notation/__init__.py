@@ -1,1 +1,1 @@
-from polish_notation import *
+from .polish_notation import *

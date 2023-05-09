@@ -1,1 +1,1 @@
-from translation_deepl import *
+from .translation_deepl import translate_po_file
