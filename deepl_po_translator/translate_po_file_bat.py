@@ -1,7 +1,6 @@
 import translation_deepl
 import os
 import sys
-import pyperclip
 
 # print(sys.argv)
 print('+---------------------------------------+')
