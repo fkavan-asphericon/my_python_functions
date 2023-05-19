@@ -102,6 +102,3 @@ def translate_po_file(filepath, language=default_language, max_num_translations 
             'error': True,
             'error_code': str(e)
         })
-
-print('g')
-# translate_po_file(r'c:\Downloads\asphericon_project_addon2.po', language='CS', max_num_translations = 150)
