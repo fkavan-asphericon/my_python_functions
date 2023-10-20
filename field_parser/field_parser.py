@@ -2,7 +2,7 @@ import re
 import copy
 
 # field Parse RE, for matching starting of the field definition name = fields.Monetary(
-fieldParseREStart = r'\s*([a-zA-Z_]+?)(\s*?=\s*?fields.)([a-zA-Z2]+?)'
+fieldParseREStart = r'(\s*)([a-zA-Z_]+?)(\s*?=\s*?fields.)([a-zA-Z2]+?)'
 fieldParseRE = fieldParseREStart + r'(\(.*\))\s*'
 INDENT_SIZE = 4
 # AUTO INDENT for further use
@@ -59,11 +59,11 @@ class SingleParser:
             }
         
         findParams = re.findall(fieldParseRE,definition)
-        additionalParams = eval(re.sub(fieldParseRE,r'Parse\4',definition))
+        additionalParams = eval(re.sub(fieldParseRE,r'Parse\5',definition))
         if findParams:
             fieldParams.update({
-                'name':     findParams[0][0],
-                'type':     findParams[0][2],
+                'name':     findParams[0][1],
+                'type':     findParams[0][3],
                 'args':     additionalParams['args'],
                 'kwargs':   additionalParams['kwargs'],
                 'nparams':  len(additionalParams['args']) + len(additionalParams['kwargs']),
@@ -126,7 +126,9 @@ def MultiParse(iterator, condition = None, changer = None):
     
     if not changer:
         def changer(stack):
-            return SingleParser(stack).dump()
+            match = re.findall(fieldParseREStart, stack)
+            leading_spaces = match[0][0]
+            return leading_spaces + ('\n'+leading_spaces).join(SingleParser(stack).dump().split('\n'))
     
     stack = ''
     for line in iterator():
