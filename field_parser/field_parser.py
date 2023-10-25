@@ -2,11 +2,73 @@ import re
 import copy
 
 # field Parse RE, for matching starting of the field definition name = fields.Monetary(
-fieldParseREStart = r'(\s*)([a-zA-Z_]+?)(\s*?=\s*?fields.)([a-zA-Z2]+?)'
-fieldParseRE = fieldParseREStart + r'(\(.*\))\s*'
+fieldParseREBase = r'(\s*)([a-zA-Z0-9_]+?)(\s*?=\s*?fields.)([a-zA-Z2]+?)'
+fieldParseREStart = fieldParseREBase + r'\('
+fieldParseRE = fieldParseREBase + r'(\(.*\))\s*'
 INDENT_SIZE = 4
 # AUTO INDENT for further use
 INDENT = ''.join([' ' for k in range(INDENT_SIZE)])
+
+parameterOrder = [
+    # String should be first
+    'string',
+    
+    # Fields specific parameters
+    'size', # Char
+    'translate', # Char
+    'trim', # Char
+    'digits', # Float
+    'sanitize', # HTML
+    'sanitize_tags', # HTML
+    'sanitize_attributes', # HTML
+    'sanitize_style', # HTML
+    'strip_style', # HTML
+    'strip_classes', # HTML
+    'max_width', # Image
+    'max_height', # Image
+    'verify_resolution', # Image
+    'currency_field', # Monetary
+    'attachment', # Binary
+    'selection', # Selection
+    'selection_add', # Selection
+    'comodel_name', # M2O, O2M, M2M
+    'inverse_name', # O2M
+    'relation', # M2M
+    'column1', # M2M
+    'column2', # M2M
+    'domain', # M2O, O2M
+    'context', # M2O, O2M
+    'auto_join', # M2O, O2M
+    'delegate', # M2O
+    'check_company', # M2O
+
+    # Basic
+    'ondelete',
+    'help',
+    'invisible',
+    'readonly',
+    'required',
+    'index',
+    # Computed and others
+    'compute',
+    'compute_sudo',
+    'related',
+    'search',
+    'inverse',
+    'recursive',
+    'default',
+    'groups',
+    'company_dependent',
+    'copy',
+    'store',
+]
+
+defaultUnnamedParameters =  {
+    'Selection': ['selection', 'string'],
+    'Many2one': ['comodel_name', 'string'],
+    'Many2many': ['comodel_name', 'relation', 'column1', 'column2'],
+    'One2many': ['comodel_name','inverse_name', 'string'],
+}
 
 # This is here for testing purposes
 sampleFields = """
@@ -37,7 +99,7 @@ sampleFields = """
 
 class ParameterIterable:
     _value = []
-    def __init__(self,value):
+    def __init__(self,value = []):
         self._value = value
     
     def __len__(self):
@@ -77,14 +139,16 @@ class ParameterIterable:
 
 class ParameterList(ParameterIterable):
     _value = []
-    def __init__(self, value):
+    def __init__(self, value=[]):
         super().__init__(value)
     def append(self, value):
         self._value.append(value)
+    def sort(self, *args, **kwargs):
+        self._value.sort(*args, **kwargs)
 
 class ParameterTuple(ParameterIterable):
     _value = []
-    def __init__(self,value):
+    def __init__(self,value=[]):
         super().__init__(value)
     def __str__(self) -> str:
         return '(' + super().__str__()[1:-1] + ')'
@@ -104,11 +168,17 @@ class ParameterString:
     _name = ''
     def __init__(self,name):
         name = name.strip()
-        if name[0] in ['"',"'"]:
+        if name and name[0] in ['"',"'"]:
             name = name[1:-1]
         self._name = name
     def __str__(self) -> str:
-        return '\'%s\'' % self._name
+        try:
+            exec('\'%s\'' % self._name)
+            return '\'%s\'' % self._name
+        except SyntaxError:
+            pass
+        return '"%s"' % self._name
+        
     def __repr__(self) -> str:
         return 'ParameterString(\'%s\')' % self._name
     def __len__(self):
@@ -161,14 +231,21 @@ class SingleParser:
 
     @property
     def parameters(self):
-        return self.params['params']
+        return 'params' in self.params and self.params['params']
     @parameters.setter
     def parameters(self,val):
         pass
 
     @property
+    def parameters_len(self):
+        return 0 if not 'params' in self.params else len(self.params['params'])
+    @parameters_len.setter
+    def parameters(self,val):
+        pass
+
+    @property
     def name(self):
-        return self.params['name']
+        return 'name' in self.params and self.params['name']
     @name.setter
     def name(self,val):
         self.params['name'] = val
@@ -182,7 +259,7 @@ class SingleParser:
 
     @property
     def type(self):
-        return self.params['type']
+        return 'type' in self.params and self.params['type']
     @type.setter
     def type(self,val):
         self.params['type'] = val
@@ -190,7 +267,8 @@ class SingleParser:
 
     def __init__(self,definition):
         match = re.findall(fieldParseREStart, definition)
-        self.leadingSpaces = len(match[0][0])
+        if match:
+            self.leadingSpaces = len(match[0][0])
         self.params = SingleParser.getFieldParams(definition)
     
     def __len__(self):
@@ -275,6 +353,8 @@ class SingleParser:
                 estring = eval(string)
                 if isinstance(estring,str):
                     current = ParameterString(estring)
+                elif callable(estring):
+                    current = ParameterVariable(string)
                 else:
                     current = estring
             # print(repr(current))
@@ -319,9 +399,10 @@ class SingleParser:
     def dump(self, params=None, short=False, leading_spaces = False):
         if not params:
             params = self.params
-        res = '%s = fields.%s(%s)' % (params['name'], params['type'], SingleParser.dumpParams(params, short=short))
+        res = '%s = fields.%s(%s' % (params['name'], params['type'], SingleParser.dumpParams(params, short=short))
         if not short and '\n' in res:
             res = ('\n' + INDENT).join(res.split('\n'))
+        res += ')' if short else '\n)'
         if leading_spaces:
             ls = ''.join([' ' for k in range(self.leadingSpaces)])
             res = ls + ('\n'+ls).join(res.split('\n'))
@@ -332,7 +413,7 @@ class SingleParser:
         allargs = []
         for param in params['params']:
             allargs.append(SingleParser.escapeParam(param, short=short))
-        return (',%s' % (' ' if short else '\n')).join(allargs)
+        return ('' if short else '\n') + (',%s' % (' ' if short else '\n')).join(allargs)
 
     @staticmethod
     def escapeParam(param, short=False):
@@ -343,20 +424,25 @@ class SingleParser:
             return '%s=%s' % (param._name, SingleParser.escapeParam(param._value,short=short))
         
         elif not short and isinstance(param, (list, ParameterList)) and len(param) > 2:
-            return ('[\n' + INDENT) + ('\n' + INDENT).join([SingleParser.escapeParam(key,short=True) for key in param]) +'\n]'
+            return ('[\n' + INDENT) + (',\n' + INDENT).join([SingleParser.escapeParam(key,short=True) for key in param]) +'\n]'
         
         elif not short and isinstance(param, (tuple, ParameterTuple)) and len(param) > 2:
-            return ('(\n' + INDENT) + ('\n' + INDENT).join([SingleParser.escapeParam(key,short=True) for key in param]) +'\n)'
+            return ('(\n' + INDENT) + (',\n' + INDENT).join([SingleParser.escapeParam(key,short=True) for key in param]) +'\n)'
         
         else:
             return str(param)
 
 def MultiParse(iterator, condition = None, changer = None):
     if not callable(iterator):
-        string = copy.deepcopy(iterator)
-        def iterator():
-            for line in string.split('\n'):
-                yield line
+        data = copy.deepcopy(iterator)
+        if isinstance(data,str):
+            def iterator():
+                for line in data.split('\n'):
+                    yield line
+        else:
+            def iterator():
+                for line in data:
+                    yield line
     
     # Condition should return:
     # 0  if it should continue
@@ -375,7 +461,7 @@ def MultiParse(iterator, condition = None, changer = None):
     
     if not changer:
         def changer(stack):
-            return SingleParser(stack).dump(leading_spaces=True)
+            return SingleParser(stack).dump(leading_spaces=True) + '\n'
     
     stack = ''
     res = ''
@@ -383,17 +469,49 @@ def MultiParse(iterator, condition = None, changer = None):
         stack += line
         cond = condition(stack)
         if cond == 1:
-            res += changer(stack) + '\n'
+            res += changer(stack)
             stack = ''
         elif cond == -1:
             pass
         else:
             stack = ''
-            res += line + '\n'
+            res += line
     return res
+
+def FieldReformat(field: SingleParser):
+    fld = copy.deepcopy(field)
+    new_params = fld.params['params']
+    type = field.params['type']
+    unnamed_params = ParameterList([])
+    named_params = ParameterList([])
+    # split to unnamed and named params
+    for param in new_params:
+        if not isinstance(param,Parameter) or not param.name:
+            if isinstance(param,Parameter):
+                unnamed_params.append(param)
+            else:
+                unnamed_params.append(Parameter('',param))
+        else:
+            named_params.append(param)
+    
+    default_unnamed = defaultUnnamedParameters.get(type,['string'])
+    max_unnamed_parameters = len(default_unnamed)
+
+    all_params = unnamed_params
+    if len(unnamed_params) <= max_unnamed_parameters:
+        for k in range(len(unnamed_params)):
+            named_params.append(Parameter(default_unnamed[k], unnamed_params[k].value))
+        all_params = ParameterList()
+    else:
+        print('Unnamed params left in field %s %s' % (fld.name,fld.type))
+
+    named_params.sort(key=lambda p: parameterOrder.index(p.name) if p.name in parameterOrder else 999)
+    all_params += named_params
+    fld.params['params'] = all_params
+    return fld
 
 def AutoAddString(stack):
     parsed_field = SingleParser(stack)
     parsed_field.insert(Parameter('string',parsed_field.AutoFieldDescription()))
     short = len(parsed_field) < 80
-    return parsed_field.dump(short=short, leading_spaces=True)
+    return parsed_field.dump(short=short, leading_spaces=True) + '\n'
