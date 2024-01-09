@@ -61,6 +61,7 @@ parameterOrder = [
     'company_dependent',
     'copy',
     'store',
+    'ondelete',
 ]
 
 defaultUnnamedParameters =  {

@@ -57,7 +57,7 @@ def is_domain_condition(domain):
     if domain in tokens:
         return True
     
-    operands = ['=','!=','like','=like','ilike','=ilike','>','<','>=','<=','childof']
+    operands = ['=','!=','in','like','=like','ilike','=ilike','>','<','>=','<=','childof']
     if isinstance(domain,list) and len(domain) == 3 and domain[1] in operands:
         return True
     else:
